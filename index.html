@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Typing Room</title>
+  <style>
+    body {
+      margin: 0;
+      background: #101010;
+      overflow: hidden;
+      font-family: monospace;
+      cursor: text;
+    }
+
+    .word {
+      position: absolute;
+      color: white;
+      font-size: 18px;
+      pointer-events: none;
+      opacity: 1;
+      transition: opacity 2s ease;
+    }
+
+    .fade {
+      opacity: 0;
+    }
+
+    #invisible-input {
+      position: absolute;
+      top: 0;
+      left: 0;
+      opacity: 0;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <input id="invisible-input" autofocus />
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const input = document.getElementById('invisible-input');
+    const socket = io();
+
+    // Always keep input in focus
+    document.body.addEventListener('click', () => input.focus());
+
+    let buffer = '';
+    let typingTimeout;
+
+    input.addEventListener('input', e => {
+      const char = e.data;
+      if (!char) return;
+
+      buffer += char;
+
+      // If user pauses typing for 800ms, send the word
+      clearTimeout(typingTimeout);
+      typingTimeout = setTimeout(() => {
+        const word = buffer.trim();
+        if (word.length > 0) {
+          socket.emit('chunk', word);
+          displayChunk(word);
+        }
+        buffer = '';
+      }, 800);
+
+      input.value = '';
+    });
+
+    socket.on('chunk', displayChunk);
+
+    function displayChunk(text) {
+      const span = document.createElement('span');
+      span.textContent = text;
+      span.className = 'word';
+
+      // Random position within viewport
+      const x = Math.random() * (window.innerWidth - 100);
+      const y = Math.random() * (window.innerHeight - 30);
+
+      span.style.left = `${x}px`;
+      span.style.top = `${y}px`;
+
+      document.body.appendChild(span);
+
+      // Fade after 5 seconds
+      setTimeout(() => {
+        span.classList.add('fade');
+        setTimeout(() => span.remove(), 2000);
+      }, 5000);
+    }
+  </script>
+</body>
+</html>
+
+

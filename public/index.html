@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Typing Room</title>
+  <style>
+    body {
+      margin: 0;
+      background: #101010;
+      overflow: hidden;
+      font-family: monospace;
+      cursor: text;
+    }
+
+    .word {
+      position: absolute;
+      color: white;
+      font-size: 18px;
+      pointer-events: none;
+      opacity: 1;
+      transition: opacity 2s ease;
+    }
+
+    .fade {
+      opacity: 0;
+    }
+
+    #invisible-input {
+      position: absolute;
+      top: 0;
+      left: 0;
+      opacity: 0;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <input id="invisible-input" autofocus />
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const input = document.getElementById('invisible-input');
+    const socket = io();
+
+    let localGroup = null;
+    let remoteGroups = {};
+
+    // Keep focus on input
+    document.body.addEventListener('click', () => input.focus());
+
+    // Unique ID per user for grouping
+    const sessionId = Math.random().toString(36).slice(2);
+
+    input.addEventListener('input', (e) => {
+      const char = e.data;
+      if (!char) return;
+
+      // Create local group if needed
+      if (!localGroup) {
+        localGroup = createGroup();
+      }
+
+      localGroup.textContent += char;
+      socket.emit('char', { sessionId, char });
+      input.value = '';
+
+      if (localGroup.fadeTimer) clearTimeout(localGroup.fadeTimer);
+      localGroup.fadeTimer = setTimeout(() => {
+        fadeAndRemove(localGroup);
+        localGroup = null;
+      }, 5000);
+    });
+
+    // Incoming character from another user
+    socket.on('char', ({ sessionId, char }) => {
+      if (!remoteGroups[sessionId]) {
+        remoteGroups[sessionId] = createGroup();
+      }
+
+      const group = remoteGroups[sessionId];
+      group.textContent += char;
+
+      if (group.fadeTimer) clearTimeout(group.fadeTimer);
+      group.fadeTimer = setTimeout(() => {
+        fadeAndRemove(group);
+        delete remoteGroups[sessionId];
+      }, 5000);
+    });
+
+    // Create a group bubble in a random position
+    function createGroup() {
+      const div = document.createElement('div');
+      div.className = 'word';
+
+      const x = Math.random() * (window.innerWidth - 200);
+      const y = Math.random() * (window.innerHeight - 50);
+      div.style.left = `${x}px`;
+      div.style.top = `${y}px`;
+
+      document.body.appendChild(div);
+      return div;
+    }
+
+    function fadeAndRemove(el) {
+      el.classList.add('fade');
+      setTimeout(() => el.remove(), 2000);
+    }
+  </script>
+</body>
+</html>
+
