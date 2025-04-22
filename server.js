@@ -1,31 +1,32 @@
 const express = require('express');
 const http = require('http');
-const socket = require('socket.io');
+const socketIO = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
-const io = socket(server);
+const io = socketIO(server);
 
-//serve static files from the public directory
+// Serve frontend files from the 'public' folder
 app.use(express.static('public'));
 
-//handle websocket connections
-io.on('connection', socket => {
-  console.log('🟢 A user connected');
+// WebSocket logic
+io.on('connection', (socket) => {
+  console.log('🟢 User connected');
 
-  // real-time character broadcasting
-  socket.on('char', char => {
-    socket.broadcast.emit('char', char);
+  socket.on('char', (data) => {
+    // Broadcast character with session and color to others
+    socket.broadcast.emit('char', data);
   });
 
   socket.on('disconnect', () => {
-    console.log('🔴 A user disconnected');
+    console.log('🔴 User disconnected');
   });
 });
 
-// start server
+// IMPORTANT: use dynamic port for Render
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
+
 

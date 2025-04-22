@@ -15,15 +15,24 @@
 
     .word {
       position: absolute;
-      color: white;
       font-size: 18px;
       pointer-events: none;
       opacity: 1;
-      transition: opacity 2s ease;
+      transition: opacity 2s ease, transform 0.2s ease;
     }
 
     .fade {
       opacity: 0;
+    }
+
+    .echo {
+      animation: pulse 0.4s ease;
+    }
+
+    @keyframes pulse {
+      0%   { transform: scale(1); }
+      50%  { transform: scale(1.2); }
+      100% { transform: scale(1); }
     }
 
     #invisible-input {
@@ -45,53 +54,61 @@
 
     let localGroup = null;
     let remoteGroups = {};
+    let activeTexts = new Map(); // text → [elements]
 
-    // Keep focus on input
-    document.body.addEventListener('click', () => input.focus());
-
-    // Unique ID per user for grouping
     const sessionId = Math.random().toString(36).slice(2);
+    const color = getRandomColor();
+
+    document.body.addEventListener('click', () => input.focus());
 
     input.addEventListener('input', (e) => {
       const char = e.data;
       if (!char) return;
 
-      // Create local group if needed
       if (!localGroup) {
-        localGroup = createGroup();
+        localGroup = createGroup(color);
+        localGroup.dataset.session = sessionId;
       }
 
       localGroup.textContent += char;
-      socket.emit('char', { sessionId, char });
+      updateActiveTexts(localGroup);
+
+      socket.emit('char', { sessionId, char, color });
       input.value = '';
 
       if (localGroup.fadeTimer) clearTimeout(localGroup.fadeTimer);
       localGroup.fadeTimer = setTimeout(() => {
         fadeAndRemove(localGroup);
+        removeFromActiveTexts(localGroup);
         localGroup = null;
       }, 5000);
     });
 
-    // Incoming character from another user
-    socket.on('char', ({ sessionId, char }) => {
+    socket.on('char', ({ sessionId, char, color }) => {
       if (!remoteGroups[sessionId]) {
-        remoteGroups[sessionId] = createGroup();
+        const group = createGroup(color);
+        group.dataset.session = sessionId;
+        remoteGroups[sessionId] = group;
       }
 
       const group = remoteGroups[sessionId];
       group.textContent += char;
+      updateActiveTexts(group);
+
+      checkForEcho(group);
 
       if (group.fadeTimer) clearTimeout(group.fadeTimer);
       group.fadeTimer = setTimeout(() => {
         fadeAndRemove(group);
+        removeFromActiveTexts(group);
         delete remoteGroups[sessionId];
       }, 5000);
     });
 
-    // Create a group bubble in a random position
-    function createGroup() {
+    function createGroup(color) {
       const div = document.createElement('div');
       div.className = 'word';
+      div.style.color = color;
 
       const x = Math.random() * (window.innerWidth - 200);
       const y = Math.random() * (window.innerHeight - 50);
@@ -102,11 +119,51 @@
       return div;
     }
 
+    function updateActiveTexts(el) {
+      const text = el.textContent;
+      removeFromActiveTexts(el);
+      if (!activeTexts.has(text)) {
+        activeTexts.set(text, []);
+      }
+      activeTexts.get(text).push(el);
+    }
+
+    function removeFromActiveTexts(el) {
+      for (const [text, els] of activeTexts.entries()) {
+        const index = els.indexOf(el);
+        if (index !== -1) {
+          els.splice(index, 1);
+          if (els.length === 0) {
+            activeTexts.delete(text);
+          }
+          break;
+        }
+      }
+    }
+
+    function checkForEcho(group) {
+      const text = group.textContent;
+      const matches = activeTexts.get(text) || [];
+      const otherGroups = matches.filter(el => el !== group);
+      if (otherGroups.length > 0) {
+        [group, ...otherGroups].forEach(el => {
+          el.classList.add('echo');
+          setTimeout(() => el.classList.remove('echo'), 400);
+        });
+      }
+    }
+
     function fadeAndRemove(el) {
       el.classList.add('fade');
       setTimeout(() => el.remove(), 2000);
     }
+
+    function getRandomColor() {
+      const hue = Math.floor(Math.random() * 360);
+      return `hsl(${hue}, 70%, 70%)`;
+    }
   </script>
 </body>
 </html>
+
 
