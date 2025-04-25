@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Typing Room</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Amatic+SC&family=Dancing+Script&family=Playfair+Display&family=Press+Start+2P&family=Roboto&family=Share+Tech+Mono&family=Special+Elite&display=swap" rel="stylesheet">
+
   <style>
     body {
       margin: 0;
@@ -11,14 +14,27 @@
       overflow: hidden;
       font-family: monospace;
       cursor: text;
+      position: relative;
+    }
+
+    .background-gif {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0.2;
+      z-index: 0;
+      pointer-events: none;
     }
 
     .word {
       position: absolute;
-      font-size: 18px;
       pointer-events: none;
       opacity: 1;
       transition: opacity 2s ease, transform 0.2s ease;
+      z-index: 1;
     }
 
     .fade {
@@ -30,8 +46,8 @@
     }
 
     @keyframes pulse {
-      0%   { transform: scale(1); }
-      50%  { transform: scale(1.2); }
+      0% { transform: scale(1); }
+      50% { transform: scale(1.2); }
       100% { transform: scale(1); }
     }
 
@@ -42,38 +58,131 @@
       opacity: 0;
       pointer-events: none;
     }
+
+    .settings {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      z-index: 2;
+      background: rgba(0,0,0,0.6);
+      padding: 10px;
+      border-radius: 8px;
+      color: #7c999c;
+      font-family: monospace;
+      font-size: 14px;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .settings label, .settings select, .settings input[type="color"] {
+      margin: 0;
+    }
+
+    .settings select, .settings input[type="color"] {
+      background: #101010;
+      color: #7c999c;
+      border: 1px solid #7c999c;
+      font-family: monospace;
+    }
   </style>
 </head>
 <body>
+
+ 
+  <img class="background-gif" id="background-gif" alt="overlay background">
+
+  <div class="settings">
+    <label for="fontSelect">Font:</label>
+    <select id="fontSelect">
+      <option value="monospace" selected>Monospace</option>
+      <option value="'Roboto', sans-serif">Roboto</option>
+      <option value="'Playfair Display', serif">Playfair Display</option>
+      <option value="'Dancing Script', cursive">Dancing Script</option>
+      <option value="'Share Tech Mono', monospace">Share Tech Mono</option>
+      <option value="'Press Start 2P', cursive">Press Start 2P</option>
+      <option value="'Special Elite', cursive">Special Elite</option>
+      <option value="'Amatic SC', cursive">Amatic SC</option>
+    </select>
+
+    <label for="sizeSelect">Size:</label>
+    <select id="sizeSelect">
+      <option value="12">Tiny</option>
+      <option value="14">Small</option>
+      <option value="18" selected>Medium</option>
+      <option value="24">Large</option>
+      <option value="32">Huge</option>
+      <option value="40">Massive</option>
+    </select>
+
+    <label for="colorSelect">Color:</label>
+    <input type="color" id="colorSelect" value="#ffffff" />
+  </div>
+
   <input id="invisible-input" autofocus />
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
+
+    const overlays = [
+      'overlays/gradient2.gif',
+      'overlays/gradientpink.gif',
+      'overlays/purplegreenred.gif',
+    
+    ];
+    const chosenOverlay = overlays[Math.floor(Math.random() * overlays.length)];
+    document.getElementById('background-gif').src = chosenOverlay;
+
     const input = document.getElementById('invisible-input');
+    const fontSelect = document.getElementById('fontSelect');
+    const sizeSelect = document.getElementById('sizeSelect');
+    const colorSelect = document.getElementById('colorSelect');
     const socket = io();
 
     let localGroup = null;
     let remoteGroups = {};
-    let activeTexts = new Map(); // text → [elements]
+    let activeTexts = new Map();
+    let chosenColor = null;
+
+    colorSelect.addEventListener('input', () => {
+      chosenColor = colorSelect.value;
+    });
 
     const sessionId = Math.random().toString(36).slice(2);
-    const color = getRandomColor();
+    const randomColor = getRandomColor();
 
-    document.body.addEventListener('click', () => input.focus());
+    document.body.addEventListener('click', (e) => {
+      const safeTags = ['SELECT', 'OPTION', 'LABEL', 'INPUT'];
+      if (!safeTags.includes(e.target.tagName) && !e.target.closest('.settings')) {
+        input.focus();
+      }
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        setTimeout(() => input.focus(), 50);
+      }
+    });
+
+    fontSelect.addEventListener('change', () => input.focus());
+    sizeSelect.addEventListener('change', () => input.focus());
+    colorSelect.addEventListener('change', () => input.focus());
 
     input.addEventListener('input', (e) => {
       const char = e.data;
       if (!char) return;
 
       if (!localGroup) {
-        localGroup = createGroup(color);
+        const colorToUse = chosenColor || randomColor;
+        localGroup = createGroup(colorToUse);
         localGroup.dataset.session = sessionId;
       }
 
       localGroup.textContent += char;
       updateActiveTexts(localGroup);
 
-      socket.emit('char', { sessionId, char, color });
+      socket.emit('char', { sessionId, char, color: chosenColor || randomColor });
       input.value = '';
 
       if (localGroup.fadeTimer) clearTimeout(localGroup.fadeTimer);
@@ -109,6 +218,11 @@
       const div = document.createElement('div');
       div.className = 'word';
       div.style.color = color;
+
+      const fontChoice = fontSelect.value;
+      const sizeChoice = sizeSelect.value;
+      div.style.fontFamily = fontChoice;
+      div.style.fontSize = `${sizeChoice}px`;
 
       const x = Math.random() * (window.innerWidth - 200);
       const y = Math.random() * (window.innerHeight - 50);
@@ -165,5 +279,13 @@
   </script>
 </body>
 </html>
+
+
+
+
+
+
+
+
 
 
