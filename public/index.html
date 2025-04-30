@@ -4,8 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Typing Room</title>
-
-  <link href="https://fonts.googleapis.com/css2?family=Amatic+SC&family=Dancing+Script&family=Playfair+Display&family=Press+Start+2P&family=Roboto&family=Share+Tech+Mono&family=Special+Elite&display=swap" rel="stylesheet">
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 
   <style>
     html, body, .clickable-area {
@@ -20,18 +19,6 @@
       position: relative;
     }
 
-    .background-gif {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      opacity: 0.2;
-      z-index: 0;
-      pointer-events: none;
-    }
-
     .clickable-area {
       position: fixed;
       top: 0;
@@ -43,24 +30,18 @@
 
     .text-box {
       position: absolute;
-      color: white;
       background: transparent;
       border: none;
       outline: none;
       resize: none;
       font-family: monospace;
       font-size: 18px;
-      line-height: 1.4;
+      color: white;
       z-index: 1;
       min-width: 100px;
       min-height: 30px;
       padding: 4px;
       overflow: hidden;
-    }
-
-    .fade-out {
-      opacity: 0;
-      transition: opacity 2s ease;
     }
 
     .settings {
@@ -75,8 +56,6 @@
       font-family: monospace;
       font-size: 14px;
       display: flex;
-      flex-direction: row;
-      align-items: center;
       gap: 10px;
     }
 
@@ -90,7 +69,6 @@
 </head>
 <body>
 
-  <img class="background-gif" id="background-gif" alt="overlay background">
   <div class="clickable-area"></div>
 
   <div class="settings">
@@ -121,65 +99,67 @@
   </div>
 
   <script>
-    const overlays = [
-      'overlays/gradient2.gif',
-      'overlays/gradientpink.gif',
-      'overlays/purplegreenred.gif',
-    ];
-    const chosenOverlay = overlays[Math.floor(Math.random() * overlays.length)];
-    document.getElementById('background-gif').src = chosenOverlay;
-
+    const socket = io();
     const fontSelect = document.getElementById('fontSelect');
     const sizeSelect = document.getElementById('sizeSelect');
     const colorSelect = document.getElementById('colorSelect');
 
-    let currentBox = null;
+    const sessionId = Math.random().toString(36).substring(2);
+    const boxes = new Map();
 
-    function scheduleFadeOut(box, delay = 5000) {
-      if (box.fadeTimeout) clearTimeout(box.fadeTimeout);
-      box.fadeTimeout = setTimeout(() => {
-        box.classList.add('fade-out');
-        setTimeout(() => box.remove(), 2000);
-      }, delay);
-    }
-
-    document.body.addEventListener('click', (e) => {
-      const isSettings = e.target.closest('.settings');
-      const isClickArea = e.target.classList.contains('clickable-area');
-      if (!isClickArea || isSettings) return;
-
-      // Finalize old box
-      if (currentBox) {
-        currentBox.setAttribute('readonly', true);
-        currentBox.setAttribute('disabled', true);
-        currentBox.blur();
-        scheduleFadeOut(currentBox);
-        currentBox = null;
-      }
-
-      const font = fontSelect.value;
-      const size = sizeSelect.value;
-      const color = colorSelect.value;
-
+    function createBox({ id, text, x, y, font, size, color, remote }) {
       const textarea = document.createElement('textarea');
       textarea.className = 'text-box';
-      textarea.style.left = `${e.clientX}px`;
-      textarea.style.top = `${e.clientY}px`;
+      textarea.style.left = `${x}px`;
+      textarea.style.top = `${y}px`;
       textarea.style.fontFamily = font;
       textarea.style.fontSize = `${size}px`;
       textarea.style.color = color;
+      textarea.value = text;
+      textarea.dataset.id = id;
 
-      textarea.addEventListener('input', () => scheduleFadeOut(textarea));
-      textarea.addEventListener('keydown', () => scheduleFadeOut(textarea));
+      if (remote) {
+        textarea.setAttribute('readonly', true);
+        textarea.setAttribute('disabled', true);
+      } else {
+        textarea.addEventListener('input', () => {
+          socket.emit('update-box', {
+            id, text: textarea.value
+          });
+        });
+      }
 
       document.body.appendChild(textarea);
-      textarea.focus();
+      boxes.set(id, textarea);
+    }
 
-      currentBox = textarea;
+    document.body.addEventListener('click', (e) => {
+      if (!e.target.classList.contains('clickable-area')) return;
+
+      const id = sessionId + '-' + Date.now();
+      const font = fontSelect.value;
+      const size = sizeSelect.value;
+      const color = colorSelect.value;
+      const x = e.clientX;
+      const y = e.clientY;
+
+      createBox({ id, text: '', x, y, font, size, color, remote: false });
+
+      socket.emit('create-box', { id, text: '', x, y, font, size, color });
+    });
+
+    socket.on('create-box', (data) => {
+      createBox(data);
+    });
+
+    socket.on('update-box', ({ id, text }) => {
+      const box = boxes.get(id);
+      if (box) box.value = text;
     });
   </script>
 </body>
 </html>
+
 
 
 
