@@ -6,26 +6,30 @@
   <title>Typing Room</title>
   <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 
+  <link href="https://fonts.googleapis.com/css2?family=Amatic+SC&family=Dancing+Script&family=Playfair+Display&family=Press+Start+2P&family=Roboto&family=Share+Tech+Mono&family=Special+Elite&display=swap" rel="stylesheet">
+
   <style>
-    html, body, .clickable-area {
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+      font-family: monospace;
+      background: #101010;
+      overflow: hidden;
       cursor: text;
     }
 
-    body {
-      margin: 0;
-      background: #101010;
-      overflow: hidden;
-      font-family: monospace;
-      position: relative;
-    }
-
-    .clickable-area {
+    .background-gif {
       position: fixed;
       top: 0;
       left: 0;
-      width: 100%;
-      height: 100%;
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
+      opacity: 0.2;
       z-index: 0;
+      pointer-events: none;
     }
 
     .text-box {
@@ -37,18 +41,23 @@
       font-family: monospace;
       font-size: 18px;
       color: white;
-      z-index: 1;
+      z-index: 2;
       min-width: 100px;
       min-height: 30px;
       padding: 4px;
       overflow: hidden;
     }
 
+    .fade-out {
+      opacity: 0;
+      transition: opacity 2s ease;
+    }
+
     .settings {
       position: fixed;
       top: 20px;
       left: 20px;
-      z-index: 2;
+      z-index: 99;
       background: rgba(0,0,0,0.6);
       padding: 10px;
       border-radius: 8px;
@@ -65,11 +74,25 @@
       border: 1px solid #7c999c;
       font-family: monospace;
     }
+
+    .cursor-indicator {
+      position: absolute;
+      width: 2px;
+      height: 1em;
+      background: white;
+      animation: blink 1s steps(2, start) infinite;
+      z-index: 3;
+      pointer-events: none;
+    }
+
+    @keyframes blink {
+      to { visibility: hidden; }
+    }
   </style>
 </head>
 <body>
 
-  <div class="clickable-area"></div>
+  <img class="background-gif" id="background-gif" alt="overlay background">
 
   <div class="settings">
     <label for="fontSelect">Type:</label>
@@ -98,89 +121,98 @@
     <input type="color" id="colorSelect" value="#ffffff" />
   </div>
 
+  <div id="cursor" class="cursor-indicator" style="display: none;"></div>
+
   <script>
     const socket = io();
     const fontSelect = document.getElementById('fontSelect');
     const sizeSelect = document.getElementById('sizeSelect');
     const colorSelect = document.getElementById('colorSelect');
-
+    const cursor = document.getElementById('cursor');
     const sessionId = Math.random().toString(36).substring(2);
     const boxes = new Map();
 
-    function createBox({ id, text, x, y, font, size, color, remote }) {
-      const textarea = document.createElement('textarea');
-      textarea.className = 'text-box';
-      textarea.style.left = `${x}px`;
-      textarea.style.top = `${y}px`;
-      textarea.style.fontFamily = font;
-      textarea.style.fontSize = `${size}px`;
-      textarea.style.color = color;
-      textarea.value = text;
-      textarea.dataset.id = id;
+    const backgrounds = [
+      'overlays/gradient2.gif',
+      'overlays/gradientpink.gif',
+      'overlays/purplegreenred.gif'
+    ];
+    document.getElementById('background-gif').src = backgrounds[Math.floor(Math.random() * backgrounds.length)];
 
-      if (remote) {
-        textarea.setAttribute('readonly', true);
-        textarea.setAttribute('disabled', true);
+    function scheduleFade(box, delay = 10000) {
+      if (box.fadeTimeout) clearTimeout(box.fadeTimeout);
+      box.fadeTimeout = setTimeout(() => {
+        box.classList.add('fade-out');
+        setTimeout(() => box.remove(), 2000);
+      }, delay);
+    }
+
+    function createOrUpdateBox({ id, session, text, x, y, font, size, color }) {
+      let box = boxes.get(id);
+      if (!box) {
+        box = document.createElement('textarea');
+        box.className = 'text-box';
+        box.dataset.id = id;
+        box.style.left = `${x}px`;
+        box.style.top = `${y}px`;
+        box.style.fontFamily = font;
+        box.style.fontSize = `${size}px`;
+        box.style.color = color;
+        box.value = text;
+
+        if (session !== sessionId) {
+          box.setAttribute('readonly', true);
+          box.setAttribute('disabled', true);
+        }
+
+        document.body.appendChild(box);
+        boxes.set(id, box);
       } else {
-        textarea.addEventListener('input', () => {
-          socket.emit('update-box', {
-            id, text: textarea.value
-          });
-        });
+        box.value = text;
       }
 
-      document.body.appendChild(textarea);
-      boxes.set(id, textarea);
+      scheduleFade(box);
+
+      if (session === sessionId && !box.hasListener) {
+        box.hasListener = true;
+        box.addEventListener('input', () => {
+          socket.emit('update-box', { id, session, text: box.value });
+          scheduleFade(box);
+        });
+      }
     }
 
     document.body.addEventListener('click', (e) => {
-      if (!e.target.classList.contains('clickable-area')) return;
+      const isUI = e.target.closest('.settings') || e.target.classList.contains('text-box');
+      if (isUI) return;
+
+      const x = e.clientX;
+      const y = e.clientY;
+
+      // Show blinking caret
+      cursor.style.left = `${x}px`;
+      cursor.style.top = `${y - 8}px`; // slightly above to center on click
+      cursor.style.display = 'block';
 
       const id = sessionId + '-' + Date.now();
       const font = fontSelect.value;
       const size = sizeSelect.value;
       const color = colorSelect.value;
-      const x = e.clientX;
-      const y = e.clientY;
 
-      createBox({ id, text: '', x, y, font, size, color, remote: false });
+      const boxData = { id, session: sessionId, text: '', x, y, font, size, color };
+      createOrUpdateBox(boxData);
+      socket.emit('create-box', boxData);
 
-      socket.emit('create-box', { id, text: '', x, y, font, size, color });
+      // Hide cursor after short delay (once typing box appears)
+      setTimeout(() => {
+        cursor.style.display = 'none';
+      }, 150);
     });
 
-    socket.on('create-box', (data) => {
-      createBox(data);
-    });
-
-    socket.on('update-box', ({ id, text }) => {
-      const box = boxes.get(id);
-      if (box) box.value = text;
-    });
+    socket.on('create-box', createOrUpdateBox);
+    socket.on('update-box', createOrUpdateBox);
   </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
