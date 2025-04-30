@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>Typing Room</title>
   <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 
@@ -18,6 +18,7 @@
       background: #101010;
       overflow: hidden;
       cursor: text;
+      touch-action: manipulation;
     }
 
     .background-gif {
@@ -42,10 +43,11 @@
       font-size: 18px;
       color: white;
       z-index: 2;
-      min-width: 100px;
-      min-height: 30px;
       padding: 4px;
       overflow: hidden;
+      white-space: nowrap;
+      min-width: 1ch;
+      height: auto;
     }
 
     .fade-out {
@@ -147,6 +149,18 @@
       }, delay);
     }
 
+    function autoExpand(el) {
+      const span = document.createElement('span');
+      span.style.position = 'absolute';
+      span.style.whiteSpace = 'pre';
+      span.style.visibility = 'hidden';
+      span.style.font = getComputedStyle(el).font;
+      span.textContent = el.value || ' ';
+      document.body.appendChild(span);
+      el.style.width = `${span.offsetWidth + 12}px`;
+      span.remove();
+    }
+
     function createOrUpdateBox({ id, session, text, x, y, font, size, color }) {
       let box = boxes.get(id);
       if (!box) {
@@ -160,10 +174,7 @@
         box.style.color = color;
         box.value = text;
 
-        if (session !== sessionId) {
-          box.setAttribute('readonly', true);
-          box.setAttribute('disabled', true);
-        }
+        box.readOnly = session !== sessionId;
 
         document.body.appendChild(box);
         boxes.set(id, box);
@@ -171,11 +182,13 @@
         box.value = text;
       }
 
+      autoExpand(box);
       scheduleFade(box);
 
       if (session === sessionId && !box.hasListener) {
         box.hasListener = true;
         box.addEventListener('input', () => {
+          autoExpand(box);
           socket.emit('update-box', { id, session, text: box.value });
           scheduleFade(box);
         });
@@ -183,15 +196,14 @@
     }
 
     document.body.addEventListener('click', (e) => {
-      const isUI = e.target.closest('.settings') || e.target.classList.contains('text-box');
+      const isUI = e.target.closest('.settings');
       if (isUI) return;
 
       const x = e.clientX;
       const y = e.clientY;
 
-      // Show blinking caret
       cursor.style.left = `${x}px`;
-      cursor.style.top = `${y - 8}px`; // slightly above to center on click
+      cursor.style.top = `${y - 8}px`;
       cursor.style.display = 'block';
 
       const id = sessionId + '-' + Date.now();
@@ -203,7 +215,6 @@
       createOrUpdateBox(boxData);
       socket.emit('create-box', boxData);
 
-      // Hide cursor after short delay (once typing box appears)
       setTimeout(() => {
         cursor.style.display = 'none';
       }, 150);
@@ -214,5 +225,7 @@
   </script>
 </body>
 </html>
+
+
 
 
