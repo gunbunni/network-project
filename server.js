@@ -13,9 +13,9 @@ app.use(express.static('public'));
 io.on('connection', (socket) => {
   console.log('🟢 User connected');
 
-  socket.on('char', (data) => {
-    // Broadcast character with session and color to others
-    socket.broadcast.emit('char', data);
+  socket.on('text-update', (data) => {
+    // Broadcast full text box info to all other clients
+    socket.broadcast.emit('text-update', data);
   });
 
   socket.on('disconnect', () => {
@@ -23,10 +23,11 @@ io.on('connection', (socket) => {
   });
 });
 
-// IMPORTANT: use dynamic port for Render
+// IMPORTANT: use dynamic port for Render or default to 3000
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
+
 
 

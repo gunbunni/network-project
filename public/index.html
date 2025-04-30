@@ -8,12 +8,15 @@
   <link href="https://fonts.googleapis.com/css2?family=Amatic+SC&family=Dancing+Script&family=Playfair+Display&family=Press+Start+2P&family=Roboto&family=Share+Tech+Mono&family=Special+Elite&display=swap" rel="stylesheet">
 
   <style>
+    html, body, .clickable-area {
+      cursor: text;
+    }
+
     body {
       margin: 0;
       background: #101010;
       overflow: hidden;
       font-family: monospace;
-      cursor: text;
       position: relative;
     }
 
@@ -29,34 +32,35 @@
       pointer-events: none;
     }
 
-    .word {
-      position: absolute;
-      pointer-events: none;
-      opacity: 1;
-      transition: opacity 2s ease, transform 0.2s ease;
-      z-index: 1;
-    }
-
-    .fade {
-      opacity: 0;
-    }
-
-    .echo {
-      animation: pulse 0.4s ease;
-    }
-
-    @keyframes pulse {
-      0% { transform: scale(1); }
-      50% { transform: scale(1.2); }
-      100% { transform: scale(1); }
-    }
-
-    #invisible-input {
-      position: absolute;
+    .clickable-area {
+      position: fixed;
       top: 0;
       left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+    }
+
+    .text-box {
+      position: absolute;
+      color: white;
+      background: transparent;
+      border: none;
+      outline: none;
+      resize: none;
+      font-family: monospace;
+      font-size: 18px;
+      line-height: 1.4;
+      z-index: 1;
+      min-width: 100px;
+      min-height: 30px;
+      padding: 4px;
+      overflow: hidden;
+    }
+
+    .fade-out {
       opacity: 0;
-      pointer-events: none;
+      transition: opacity 2s ease;
     }
 
     .settings {
@@ -76,10 +80,6 @@
       gap: 10px;
     }
 
-    .settings label, .settings select, .settings input[type="color"] {
-      margin: 0;
-    }
-
     .settings select, .settings input[type="color"] {
       background: #101010;
       color: #7c999c;
@@ -90,195 +90,110 @@
 </head>
 <body>
 
- 
   <img class="background-gif" id="background-gif" alt="overlay background">
+  <div class="clickable-area"></div>
 
   <div class="settings">
-    <label for="fontSelect">Font:</label>
+    <label for="fontSelect">Type:</label>
     <select id="fontSelect">
-      <option value="monospace" selected>Monospace</option>
-      <option value="'Roboto', sans-serif">Roboto</option>
-      <option value="'Playfair Display', serif">Playfair Display</option>
-      <option value="'Dancing Script', cursive">Dancing Script</option>
-      <option value="'Share Tech Mono', monospace">Share Tech Mono</option>
-      <option value="'Press Start 2P', cursive">Press Start 2P</option>
-      <option value="'Special Elite', cursive">Special Elite</option>
-      <option value="'Amatic SC', cursive">Amatic SC</option>
+      <option value="monospace">Code Whisper</option>
+      <option value="'Roboto', sans-serif">Urban Voice</option>
+      <option value="'Playfair Display', serif">Classical Drama</option>
+      <option value="'Dancing Script', cursive">Ballet Flow</option>
+      <option value="'Share Tech Mono', monospace">Terminal Soul</option>
+      <option value="'Press Start 2P', cursive">Pixel Dream</option>
+      <option value="'Special Elite', cursive">Retro Agent</option>
+      <option value="'Amatic SC', cursive">Notebook Whimsy</option>
     </select>
 
-    <label for="sizeSelect">Size:</label>
+    <label for="sizeSelect">Fervor:</label>
     <select id="sizeSelect">
-      <option value="12">Tiny</option>
-      <option value="14">Small</option>
-      <option value="18" selected>Medium</option>
-      <option value="24">Large</option>
-      <option value="32">Huge</option>
-      <option value="40">Massive</option>
+      <option value="12">Whisper</option>
+      <option value="14">Hum</option>
+      <option value="18" selected>Voice</option>
+      <option value="24">Shout</option>
+      <option value="32">Thunder</option>
+      <option value="40">Cosmic Roar</option>
     </select>
 
-    <label for="colorSelect">Color:</label>
+    <label for="colorSelect">Mood:</label>
     <input type="color" id="colorSelect" value="#ffffff" />
   </div>
 
-  <input id="invisible-input" autofocus />
-
-  <script src="/socket.io/socket.io.js"></script>
   <script>
-
     const overlays = [
       'overlays/gradient2.gif',
       'overlays/gradientpink.gif',
       'overlays/purplegreenred.gif',
-    
     ];
     const chosenOverlay = overlays[Math.floor(Math.random() * overlays.length)];
     document.getElementById('background-gif').src = chosenOverlay;
 
-    const input = document.getElementById('invisible-input');
     const fontSelect = document.getElementById('fontSelect');
     const sizeSelect = document.getElementById('sizeSelect');
     const colorSelect = document.getElementById('colorSelect');
-    const socket = io();
 
-    let localGroup = null;
-    let remoteGroups = {};
-    let activeTexts = new Map();
-    let chosenColor = null;
+    let currentBox = null;
 
-    colorSelect.addEventListener('input', () => {
-      chosenColor = colorSelect.value;
-    });
-
-    const sessionId = Math.random().toString(36).slice(2);
-    const randomColor = getRandomColor();
+    function scheduleFadeOut(box, delay = 5000) {
+      if (box.fadeTimeout) clearTimeout(box.fadeTimeout);
+      box.fadeTimeout = setTimeout(() => {
+        box.classList.add('fade-out');
+        setTimeout(() => box.remove(), 2000);
+      }, delay);
+    }
 
     document.body.addEventListener('click', (e) => {
-      const safeTags = ['SELECT', 'OPTION', 'LABEL', 'INPUT'];
-      if (!safeTags.includes(e.target.tagName) && !e.target.closest('.settings')) {
-        input.focus();
+      const isSettings = e.target.closest('.settings');
+      const isClickArea = e.target.classList.contains('clickable-area');
+      if (!isClickArea || isSettings) return;
+
+      // Finalize old box
+      if (currentBox) {
+        currentBox.setAttribute('readonly', true);
+        currentBox.setAttribute('disabled', true);
+        currentBox.blur();
+        scheduleFadeOut(currentBox);
+        currentBox = null;
       }
+
+      const font = fontSelect.value;
+      const size = sizeSelect.value;
+      const color = colorSelect.value;
+
+      const textarea = document.createElement('textarea');
+      textarea.className = 'text-box';
+      textarea.style.left = `${e.clientX}px`;
+      textarea.style.top = `${e.clientY}px`;
+      textarea.style.fontFamily = font;
+      textarea.style.fontSize = `${size}px`;
+      textarea.style.color = color;
+
+      textarea.addEventListener('input', () => scheduleFadeOut(textarea));
+      textarea.addEventListener('keydown', () => scheduleFadeOut(textarea));
+
+      document.body.appendChild(textarea);
+      textarea.focus();
+
+      currentBox = textarea;
     });
-
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') {
-        setTimeout(() => input.focus(), 50);
-      }
-    });
-
-    fontSelect.addEventListener('change', () => input.focus());
-    sizeSelect.addEventListener('change', () => input.focus());
-    colorSelect.addEventListener('change', () => input.focus());
-
-    input.addEventListener('input', (e) => {
-      const char = e.data;
-      if (!char) return;
-
-      if (!localGroup) {
-        const colorToUse = chosenColor || randomColor;
-        localGroup = createGroup(colorToUse);
-        localGroup.dataset.session = sessionId;
-      }
-
-      localGroup.textContent += char;
-      updateActiveTexts(localGroup);
-
-      socket.emit('char', { sessionId, char, color: chosenColor || randomColor });
-      input.value = '';
-
-      if (localGroup.fadeTimer) clearTimeout(localGroup.fadeTimer);
-      localGroup.fadeTimer = setTimeout(() => {
-        fadeAndRemove(localGroup);
-        removeFromActiveTexts(localGroup);
-        localGroup = null;
-      }, 5000);
-    });
-
-    socket.on('char', ({ sessionId, char, color }) => {
-      if (!remoteGroups[sessionId]) {
-        const group = createGroup(color);
-        group.dataset.session = sessionId;
-        remoteGroups[sessionId] = group;
-      }
-
-      const group = remoteGroups[sessionId];
-      group.textContent += char;
-      updateActiveTexts(group);
-
-      checkForEcho(group);
-
-      if (group.fadeTimer) clearTimeout(group.fadeTimer);
-      group.fadeTimer = setTimeout(() => {
-        fadeAndRemove(group);
-        removeFromActiveTexts(group);
-        delete remoteGroups[sessionId];
-      }, 5000);
-    });
-
-    function createGroup(color) {
-      const div = document.createElement('div');
-      div.className = 'word';
-      div.style.color = color;
-
-      const fontChoice = fontSelect.value;
-      const sizeChoice = sizeSelect.value;
-      div.style.fontFamily = fontChoice;
-      div.style.fontSize = `${sizeChoice}px`;
-
-      const x = Math.random() * (window.innerWidth - 200);
-      const y = Math.random() * (window.innerHeight - 50);
-      div.style.left = `${x}px`;
-      div.style.top = `${y}px`;
-
-      document.body.appendChild(div);
-      return div;
-    }
-
-    function updateActiveTexts(el) {
-      const text = el.textContent;
-      removeFromActiveTexts(el);
-      if (!activeTexts.has(text)) {
-        activeTexts.set(text, []);
-      }
-      activeTexts.get(text).push(el);
-    }
-
-    function removeFromActiveTexts(el) {
-      for (const [text, els] of activeTexts.entries()) {
-        const index = els.indexOf(el);
-        if (index !== -1) {
-          els.splice(index, 1);
-          if (els.length === 0) {
-            activeTexts.delete(text);
-          }
-          break;
-        }
-      }
-    }
-
-    function checkForEcho(group) {
-      const text = group.textContent;
-      const matches = activeTexts.get(text) || [];
-      const otherGroups = matches.filter(el => el !== group);
-      if (otherGroups.length > 0) {
-        [group, ...otherGroups].forEach(el => {
-          el.classList.add('echo');
-          setTimeout(() => el.classList.remove('echo'), 400);
-        });
-      }
-    }
-
-    function fadeAndRemove(el) {
-      el.classList.add('fade');
-      setTimeout(() => el.remove(), 2000);
-    }
-
-    function getRandomColor() {
-      const hue = Math.floor(Math.random() * 360);
-      return `hsl(${hue}, 70%, 70%)`;
-    }
   </script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
