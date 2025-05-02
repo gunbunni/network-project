@@ -13,12 +13,26 @@
       margin: 0;
       padding: 0;
       height: 100%;
-      width: 100%;
       font-family: monospace;
       background: #101010;
       overflow: hidden;
       cursor: text;
       touch-action: manipulation;
+    }
+
+    .scroll-container {
+      width: 100vw;
+      height: 100vh;
+      overflow-x: auto;
+      overflow-y: hidden;
+      position: relative;
+      white-space: nowrap;
+    }
+
+    .scroll-body {
+      min-width: 100vw;
+      height: 100%;
+      position: relative;
     }
 
     .background-gif {
@@ -115,15 +129,19 @@
       <option value="14">Hum</option>
       <option value="18" selected>Voice</option>
       <option value="24">Shout</option>
-      <option value="32">Thunder</option>
-      <option value="40">Cosmic Roar</option>
+      <option value="32">Roar</option>
+      <option value="40">Thunder</option>
     </select>
 
     <label for="colorSelect">Mood:</label>
     <input type="color" id="colorSelect" value="#ffffff" />
   </div>
 
-  <div id="cursor" class="cursor-indicator" style="display: none;"></div>
+  <div class="cursor-indicator" id="cursor" style="display: none;"></div>
+
+  <div class="scroll-container">
+    <div class="scroll-body" id="scrollBody"></div>
+  </div>
 
   <script>
     const socket = io();
@@ -131,6 +149,7 @@
     const sizeSelect = document.getElementById('sizeSelect');
     const colorSelect = document.getElementById('colorSelect');
     const cursor = document.getElementById('cursor');
+    const scrollBody = document.getElementById('scrollBody');
     const sessionId = Math.random().toString(36).substring(2);
     const boxes = new Map();
 
@@ -176,7 +195,7 @@
 
         box.readOnly = session !== sessionId;
 
-        document.body.appendChild(box);
+        scrollBody.appendChild(box);
         boxes.set(id, box);
       } else {
         box.value = text;
@@ -199,7 +218,7 @@
       const isUI = e.target.closest('.settings');
       if (isUI) return;
 
-      const x = e.clientX;
+      const x = e.clientX + document.querySelector('.scroll-container').scrollLeft;
       const y = e.clientY;
 
       cursor.style.left = `${x}px`;
@@ -225,6 +244,7 @@
   </script>
 </body>
 </html>
+
 
 
 
